@@ -1,0 +1,4 @@
+#!/bin/bash
+set -xe
+pubkey={{ admin_ssh_publickey }}
+ssh -i ${pubkey%.*} -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no {{ admin_username }}@{{ bastion_public_ip }} "sudo /root/install_openshift.sh"

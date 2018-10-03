@@ -1,0 +1,47 @@
+---
+- name: "Performing operations just after an OpenShift's installation is done"
+  hosts: openshift_master_group
+  become: True
+  vars:
+     selector_compute: "node-role.kubernetes.io/compute=true"
+     selector_infra: "node-role.kubernetes.io/infra=true"
+  tasks:
+     - name: Make sure OpenShift's Master is fully functional
+       command: oc login --username=system:admin
+       register: login_admin
+       until: login_admin.rc == 0
+       retries: 120
+       delay: 60
+
+     - name: "Modify configuration in Master, so all Pods will be create in {{ selector_compute }}"
+       lineinfile: dest=/etc/origin/master/master-config.yaml  state=present regexp="defaultNodeSelector" line='  defaultNodeSelector{{ ':' }} "{{ selector_compute }}"'
+#       notify: "OpenShift Master Restart"
+
+     - name: Removing nodeSelector on registry-console
+       command: "oc patch deploymentconfig/registry-console --type=json --patch='[{\"op\":\"remove\", \"path\":\"/spec/template/spec/nodeSelector\"}]' --namespace default"
+
+     - name: "Adding a nodeSelector into registry-console: {{ selector_infra }}"
+       command: "oc patch deploymentconfig/registry-console --patch='{\"spec\":{\"template\":{\"spec\":{\"nodeSelector\":{\"node-role.kubernetes.io/infra\": \"true\"}}}}}' --namespace default"
+
+     - name: "Rollout registry-console to be at: {{ selector_infra }}"
+       command: "oc rollout latest deploymentconfig/registry-console --namespace default"
+
+     - name: "All pods in Project Default and OpenShift-Infra  must run on Infra Node"
+       command: "oc patch namespace/{{ item }} --patch '{\"metadata\": {\"name\":\"{{ item }}\",\"annotations\":{\"openshift.io/node-selector\": \"{{ selector_infra }}\"}}}'"
+       with_items:
+          - default
+          - openshift-infra
+
+#  handlers: 
+     - name: OpenShift Master Restart 
+       command: /usr/local/bin/master-restart {{ item }} 
+       with_items: 
+          - api
+          - controllers
+
+     - name: Make sure OpenShift's Master is working before moving on
+       command: oc login --username=system:admin
+       register: login_admin
+       until: login_admin.rc == 0
+       retries: 120
+       delay: 60

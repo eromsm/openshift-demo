@@ -1,0 +1,15 @@
+---
+- name: Starting OpenShift Cluster
+  hosts: localhost
+  connection: local
+  vars_files:
+     - openshift.config
+     - cloud_provider/{{ cloud_provider }}
+  roles:
+     - { role: "{{ cloud_provider }}_ocp_initial_steps" }
+     - { role: "{{ cloud_provider }}_ocp_start" }
+     - { role: "{{ cloud_provider }}_ocp_fetch_bastion", next_node: "{{ number_of_nodes|int + 1 }}" }
+     - { role: bastion_local_script }
+     - { role: "{{ cloud_provider }}_ocp_fetch_master_infra" }
+     - { role: ocp_url }
+     - { role: notification_slack, message: "OpenShift Started. WebConsole on https://{{ openshift_master_url }}:8443/" }
